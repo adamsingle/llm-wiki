@@ -345,9 +345,17 @@ class WikiAgent:
         """Convenience: triggers ingest workflow for a specific source."""
         msg = (
             f"Please ingest the source file at: {source_path}\n\n"
-            "Follow the full ingest workflow: read the file, extract key insights, "
-            "write a summary wiki page, update index.md, create or update any relevant "
-            "entity or concept pages with cross-links, then append to log.md."
+            "Use the read_file tool to read it — the tool will automatically extract "
+            "text from PDFs, Word docs, HTML, CSV, and plain text files, returning "
+            "clean text regardless of the original format.\n\n"
+            "Follow the full ingest workflow:\n"
+            "1. Read the file with read_file\n"
+            "2. Identify the key entities, concepts, and insights\n"
+            "3. Write a summary page in wiki/sources/\n"
+            "4. Create or update relevant pages in wiki/entities/ and wiki/concepts/\n"
+            "5. Update wiki/index.md\n"
+            "6. Append to log.md with append_log\n\n"
+            "The source content is plain text — write wiki pages in clean markdown."
         )
         return self.chat(msg)
 
@@ -524,7 +532,7 @@ def cmd_chat(args):
         if not user_input:
             continue
 
-        if user_input == "/exit":
+        if user_input.lower() in ("/exit", "/quit", "exit", "quit", "q"):
             print("Goodbye.")
             break
         elif user_input == "/reset":
@@ -550,10 +558,28 @@ def cmd_chat(args):
 
 
 def cmd_ingest(args):
+    import shutil
     config = load_config()
+
+    source = Path(args.file)
+    if not source.exists():
+        print(f"❌ File not found: {args.file}")
+        sys.exit(1)
+
+    # Copy into raw/ so the agent always works from a stable relative path
+    wiki_root = Path(config.get("paths", {}).get("wiki_root", "."))
+    raw_dir = wiki_root / "raw"
+    raw_dir.mkdir(exist_ok=True)
+    dest = raw_dir / source.name
+    if not dest.exists():
+        shutil.copy2(source, dest)
+        print(f"  📥 Copied {source.name} → raw/{source.name}")
+    else:
+        print(f"  ℹ  raw/{source.name} already exists")
+
     agent = WikiAgent(config)
-    print(f"📥 Ingesting: {args.file}\n")
-    response = agent.ingest(args.file)
+    print(f"\n📥 Ingesting: raw/{source.name}\n")
+    response = agent.ingest(f"raw/{source.name}")
     print(f"\n{response}\n")
 
 
