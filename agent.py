@@ -27,11 +27,12 @@ from typing import Optional
 
 from tools import WikiTools
 from schema import generate_agents_md
+from providers import create_provider
 
 # ─── Defaults ────────────────────────────────────────────────────────────────
 
 CONFIG_FILE = "config.yaml"
-DEFAULT_MODEL = "qwen2.5"
+DEFAULT_MODEL = "gemma4:26b"
 OLLAMA_URL = "http://localhost:11434"
 MAX_TOOL_ROUNDS = 20   # Safety limit per agent turn
 
@@ -224,10 +225,7 @@ TOOL_DEFINITIONS = [
 class WikiAgent:
     def __init__(self, config: dict):
         self.config = config
-        self.ollama = OllamaClient(
-            base_url=config.get("ollama", {}).get("base_url", OLLAMA_URL),
-            model=config.get("ollama", {}).get("model", DEFAULT_MODEL),
-        )
+        self.provider = create_provider(config)
         wiki_root = Path(config.get("paths", {}).get("wiki_root", "."))
         self.tools = WikiTools(wiki_root)
         self.conversation_history: list = []
@@ -298,12 +296,17 @@ class WikiAgent:
         while rounds < MAX_TOOL_ROUNDS:
             rounds += 1
 
-            response = self.ollama.chat(
+            response = self.provider.chat(
                 messages=self.conversation_history,
                 tools=TOOL_DEFINITIONS,
             )
 
             message = response["message"]
+            # Normalise tool_calls to always include an id
+            if message.get("tool_calls"):
+                for tc in message["tool_calls"]:
+                    if "id" not in tc:
+                        tc["id"] = f"call_{tc.get('function', {}).get('name', 'tool')}_{len(self.conversation_history)}"
             self.conversation_history.append(message)
 
             # Check for tool calls
@@ -314,11 +317,16 @@ class WikiAgent:
 
             # Execute each tool call and add results
             for tc in tool_calls:
-                fn = tc.get("function", tc)  # handle both formats
+                fn = tc.get("function", tc)
                 tool_name = fn["name"]
                 tool_args = fn.get("arguments", {})
                 if isinstance(tool_args, str):
-                    tool_args = json.loads(tool_args)
+                    try:
+                        tool_args = json.loads(tool_args)
+                    except json.JSONDecodeError:
+                        tool_args = {}
+
+                tool_call_id = tc.get("id", f"call_{tool_name}")
 
                 print(f"  🔧 {tool_name}({', '.join(f'{k}={repr(v)[:60]}' for k,v in tool_args.items())})")
 
@@ -326,7 +334,8 @@ class WikiAgent:
 
                 self.conversation_history.append({
                     "role": "tool",
-                    "content": result,
+                    "tool_call_id": tool_call_id,
+                    "content": str(result),  # force string — Gemini rejects non-strings
                 })
 
         return "⚠️ Agent hit maximum tool rounds without finishing. Try a simpler request."
@@ -396,7 +405,12 @@ def load_config(path: str = CONFIG_FILE) -> dict:
         print("   Run 'python agent.py init' to set up a new wiki.")
         sys.exit(1)
     with open(config_path, encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        config = yaml.safe_load(f)
+    if config is None:
+        print(f"❌ config.yaml appears to be empty or contains only comments.")
+        print("   Delete it and run 'python agent.py init' to regenerate it.")
+        sys.exit(1)
+    return config
 
 
 def cmd_init(args):
@@ -407,36 +421,50 @@ def cmd_init(args):
         print("No config.yaml found — creating a sample configuration...")
         sample_config = textwrap.dedent("""\
             # LLM Wiki Agent Configuration
-            # Edit this file to configure your wiki.
+            # Edit this file, then run 'python agent.py init' again to apply.
 
             wiki:
-              # A short sentence describing what this wiki is FOR.
-              # This directly shapes the agent's behaviour and priorities.
-              purpose: "A personal knowledge base for learning and research"
-
-              # A longer description of the domain and intended use.
-              domain_description: |
+            purpose: "A personal knowledge base for learning and research"
+            domain_description: |
                 This wiki tracks articles, books, papers, and notes I read.
                 It organises knowledge by entities (people, organisations, tools)
                 and concepts (ideas, methods, frameworks). The wiki should:
                 - Highlight connections and contradictions between sources
                 - Build up a running synthesis as new material is added
                 - Flag open questions and gaps for further research
+            page_categories:
+                - entities
+                - concepts
+                - sources
+                - synthesis
+                - questions
 
-              # What categories of wiki pages should the agent create?
-              page_categories:
-                - entities      # Named things: people, places, organisations, tools
-                - concepts      # Ideas, methods, frameworks, theories
-                - sources       # One page per ingested source (summary)
-                - synthesis     # Cross-cutting analyses, comparisons, conclusions
-                - questions     # Open questions worth investigating
+            # ── LLM Provider ──────────────────────────────────────────────────────────
+            # Uncomment ONE provider block and fill in the details.
+            # For API keys, you can paste them here or set an environment variable.
 
+            # Local Ollama (default — requires https://ollama.com running)
             ollama:
-              model: qwen2.5          # Must support tool-calling. qwen2.5, llama3.1, mistral-nemo
-              base_url: http://localhost:11434
+            model: gemma4:26b
+            base_url: http://localhost:11434
+
+            # Anthropic Claude (set ANTHROPIC_API_KEY env var, or paste key below)
+            # anthropic:
+            #   model: claude-sonnet-4-5
+            #   api_key:   # leave blank to use ANTHROPIC_API_KEY env var
+
+            # OpenAI (set OPENAI_API_KEY env var, or paste key below)
+            # openai:
+            #   model: gpt-4o
+            #   api_key:   # leave blank to use OPENAI_API_KEY env var
+
+            # Google Gemini (set GOOGLE_API_KEY env var, or paste key below)
+            # gemini:
+            #   model: gemini-2.0-flash
+            #   api_key:   # leave blank to use GOOGLE_API_KEY env var
 
             paths:
-              wiki_root: .            # Root of the wiki project (where wiki/ and raw/ live)
+            wiki_root: .
         """)
         config_path.write_text(sample_config, encoding="utf-8")
         print(f"✅ Created {CONFIG_FILE}. Edit it to set your wiki's purpose, then run init again.")
@@ -486,24 +514,35 @@ def cmd_init(args):
         )
         print(f"  📄 {log_path}")
 
-    # Verify Ollama
-    client = OllamaClient(
-        base_url=config.get("ollama", {}).get("base_url", OLLAMA_URL),
-        model=config.get("ollama", {}).get("model", DEFAULT_MODEL),
+    # Verify provider
+    from providers import create_provider
+    provider = create_provider(config)
+    provider_name = (
+        "Anthropic" if "anthropic" in config else
+        "OpenAI"    if "openai"    in config else
+        "Gemini"    if "gemini"    in config else
+        "Ollama"
     )
     print()
-    if client.is_available():
-        models = client.list_models()
-        model = config.get("ollama", {}).get("model", DEFAULT_MODEL)
-        if any(model in m for m in models):
-            print(f"✅ Ollama is running. Model '{model}' is available.")
+    if provider.is_available():
+        models = provider.list_models()
+        if models:
+            print(f"✅ {provider_name} is reachable. Available models: {', '.join(models[:5])}")
         else:
-            print(f"⚠️  Ollama is running but model '{model}' not found.")
-            print(f"   Available models: {', '.join(models[:5])}")
-            print(f"   Run: ollama pull {model}")
+            print(f"✅ {provider_name} is reachable.")
     else:
-        print("⚠️  Ollama not detected at", config.get("ollama", {}).get("base_url", OLLAMA_URL))
-        print("   Make sure Ollama is running: https://ollama.com")
+        if "anthropic" in config:
+            print("⚠️  Anthropic API key not found.")
+            print("   Set the ANTHROPIC_API_KEY environment variable or add api_key to config.yaml.")
+        elif "openai" in config:
+            print("⚠️  OpenAI API key not found.")
+            print("   Set the OPENAI_API_KEY environment variable or add api_key to config.yaml.")
+        elif "gemini" in config:
+            print("⚠️  Google API key not found.")
+            print("   Set the GOOGLE_API_KEY environment variable or add api_key to config.yaml.")
+        else:
+            print("⚠️  Ollama not reachable at", config.get("ollama", {}).get("base_url", OLLAMA_URL))
+            print("   Make sure Ollama is running: https://ollama.com")
 
     print()
     print("✅ Wiki initialised! Ready to use.")
@@ -516,9 +555,10 @@ def cmd_chat(args):
     config = load_config()
     agent = WikiAgent(config)
 
-    model = config.get("ollama", {}).get("model", DEFAULT_MODEL)
+    from providers import create_provider
+    provider = create_provider(config)
     purpose = config.get("wiki", {}).get("purpose", "")
-    print(f"\n🌐 LLM Wiki Agent  |  model: {model}")
+    print(f"\n🌐 LLM Wiki Agent  |  model: {provider.model}")
     print(f"   Purpose: {purpose}")
     print("   Commands: /ingest <file>, /query <question>, /lint, /reset, /exit\n")
 
@@ -540,21 +580,36 @@ def cmd_chat(args):
             print("🔄 Conversation reset.\n")
             continue
         elif user_input == "/lint":
-            user_input = None
-            print("🔍 Running wiki lint...\n")
-            response = agent.lint()
+            try:
+                user_input = None
+                print("🔍 Running wiki lint...\n")
+                response = agent.lint()
+            except RuntimeError as e:
+                print(f"\n⚠️  Error: {e}\n")
+                print("Your conversation history is intact — try again or type /reset\n")
         elif user_input.startswith("/ingest "):
-            source = user_input[8:].strip()
-            print(f"📥 Ingesting: {source}\n")
-            response = agent.ingest(source)
+            try:
+                source = user_input[8:].strip()
+                print(f"📥 Ingesting: {source}\n")
+                response = agent.ingest(source)
+            except RuntimeError as e:
+                print(f"\n⚠️  Error: {e}\n")
+                print("Your conversation history is intact — try again or type /reset\n")
         elif user_input.startswith("/query "):
-            question = user_input[7:].strip()
-            print(f"🔍 Querying: {question}\n")
-            response = agent.query(question)
+            try:
+                question = user_input[7:].strip()
+                print(f"🔍 Querying: {question}\n")
+                response = agent.query(question)
+            except RuntimeError as e:
+                print(f"\n⚠️  Error: {e}\n")
+                print("Your conversation history is intact — try again or type /reset\n")
         else:
-            response = agent.chat(user_input)
-
-        print(f"\nAgent: {response}\n")
+            try:
+                response = agent.chat(user_input)
+                print(f"\nAgent: {response}\n")
+            except RuntimeError as e:
+                print(f"\n⚠️  Error: {e}\n")
+                print("Your conversation history is intact — try again or type /reset\n")
 
 
 def cmd_ingest(args):

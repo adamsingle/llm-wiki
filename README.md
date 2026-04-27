@@ -1,226 +1,201 @@
 # LLM Wiki Agent
 
-A local-first, agentic knowledge base powered by [Ollama](https://ollama.com), implementing the persistent wiki pattern described by Andrej Karpathy:
-> https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f
+A local-first knowledge base that uses AI to build and maintain a structured wiki from your documents. Drop in a PDF, Word doc, article, or text file — the agent reads it, extracts what matters, and weaves it into an interconnected set of markdown pages that compounds in value as you add more sources.
 
-The core idea: instead of RAG (re-deriving knowledge from raw documents every time you ask a question), the LLM **builds and maintains a persistent wiki** — a structured collection of interlinked markdown pages. Knowledge compounds. Contradictions get flagged. The wiki gets richer with every source you add.
+Based on the [LLM Wiki pattern by Andrej Karpathy](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f).
 
+---
+
+## What it does
+
+Most AI document tools answer questions and forget everything. This one builds a persistent wiki — a set of structured, interlinked markdown files that grows richer every time you add a source. When you ingest a document the agent creates summary pages, entity pages (people, tools, organisations), concept pages (ideas, methods, frameworks), updates a master index, and cross-links everything. Query it later and it's already done the work.
+
+The wiki is plain markdown files on your filesystem. You own them. No database, no cloud service, no lock-in. Open the wiki folder in Obsidian and you get a full graph view for free.
+
+---
+
+## Files in this package
+
+| File | Purpose |
+|------|---------|
+| `agent.py` | Main script — all CLI commands live here |
+| `providers.py` | LLM provider clients (Ollama, Gemini, Claude, OpenAI) |
+| `tools.py` | Filesystem tools the agent uses to read and write the wiki |
+| `schema.py` | Generates the AGENTS.md schema file that configures the agent's behaviour |
+| `requirements.txt` | Python package dependencies |
+| `install.ps1` | Windows setup script (installs all dependencies) |
+
+---
+
+## Installation (Windows)
+
+**1. Open PowerShell as Administrator** (right-click the Start menu, Windows PowerShell (Admin))
+
+**2. Navigate to this folder:**
+```powershell
+cd C:\path\to\llm-wiki-agent
 ```
-                        ┌─────────────────────────────┐
-  You drop in sources   │        Wiki Agent            │
-  You ask questions ──▶ │   (Ollama + Tool Calling)    │──▶ You read the wiki
-  You request lint      │                              │     (Obsidian, VS Code,
-                        └──────────┬──────────────────┘      any markdown viewer)
-                                   │
-              reads (never writes) │ reads + writes
-                                   │
-                    ┌──────────────▼──────────────┐
-                    │   raw/          wiki/        │
-                    │  (your         (LLM-owned    │
-                    │  sources)       markdown)    │
-                    └─────────────────────────────┘
+
+**3. Run the install script:**
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process -Force
+.\install.ps1
+```
+
+This will install Python, Git, Ollama, and all required Python packages automatically. If you plan to use a cloud provider (Gemini, Claude, or OpenAI) instead of Ollama, you can skip the Ollama install:
+
+```powershell
+.\install.ps1 -SkipOllama
 ```
 
 ---
 
-## Requirements
+## Setup
 
-- **Python 3.9+**
-- **[Ollama](https://ollama.com)** running locally
-- A tool-calling capable model (see below)
-
-### Recommended Models
-
-| Model | Size | Tool calling | Notes |
-|-------|------|-------------|-------|
-| `qwen2.5` | 7B | ✅ Excellent | Best overall for this task |
-| `qwen2.5:14b` | 14B | ✅ Excellent | Better synthesis, needs more RAM |
-| `llama3.1` | 8B | ✅ Good | Good alternative |
-| `mistral-nemo` | 12B | ✅ Good | Strong at following instructions |
-| `phi4` | 14B | ✅ Good | Very instruction-following |
-
-Pull your chosen model:
-```bash
-ollama pull qwen2.5
+**1. Create a new wiki folder and run init:**
+```powershell
+mkdir C:\my-wiki
+cd C:\my-wiki
+python C:\path\to\agent.py init
 ```
 
----
+This creates a `config.yaml` with all options commented in. Open it in any text editor.
 
-## Installation
-
-```bash
-git clone <this-repo>
-cd llm-wiki-agent
-pip install -r requirements.txt
-```
-
----
-
-## Quick Start
-
-### 1. Create your config
-
-```bash
-python agent.py init
-```
-
-This creates a sample `config.yaml`. Open it and edit the `wiki.purpose` and `wiki.domain_description` fields to describe what your wiki is for. This directly shapes how the agent behaves.
-
-### 2. Initialise the wiki
-
-Run init again after editing config.yaml:
-
-```bash
-python agent.py init
-```
-
-This creates:
-```
-./wiki/          ← The wiki (agent-maintained markdown)
-  index.md       ← Master catalog
-  log.md         ← Operation log
-  entities/
-  concepts/
-  sources/
-  synthesis/
-./raw/           ← Drop your source files here
-./AGENTS.md      ← The agent's schema/instructions (generated from config.yaml)
-```
-
-### 3. Add a source and ingest it
-
-```bash
-# Drop a markdown or text file into raw/
-cp ~/Downloads/interesting-article.md raw/
-
-# Ingest it
-python agent.py ingest raw/interesting-article.md
-```
-
-The agent will read the source, extract insights, create wiki pages, update the index, and log what it did.
-
-### 4. Ask questions
-
-```bash
-python agent.py query "What are the main arguments for X?"
-```
-
-Or start an interactive session:
-
-```bash
-python agent.py chat
-```
-
-### 5. Lint the wiki periodically
-
-```bash
-python agent.py lint
-```
-
----
-
-## Interactive Chat Commands
-
-Inside `python agent.py chat`:
-
-| Command | What it does |
-|---------|-------------|
-| `/ingest raw/file.md` | Run the ingest workflow for a source file |
-| `/query What is X?` | Run the query workflow (reads wiki, synthesises answer) |
-| `/lint` | Run a full wiki health check |
-| `/reset` | Start a fresh conversation (keeps the wiki) |
-| `/exit` | Exit |
-| *(anything else)* | Free-form conversation with the agent |
-
----
-
-## Using with Obsidian
-
-Obsidian is the recommended way to browse your wiki — it renders wikilinks, shows the graph view, and lets you follow connections visually.
-
-1. Open the `wiki/` folder as an Obsidian vault
-2. Install the **Dataview** plugin for querying page frontmatter
-3. Use **Graph View** to see what's connected
-4. Use **Obsidian Web Clipper** browser extension to clip articles directly to `raw/`
-
----
-
-## Configuring Your Wiki
-
-The key file is `config.yaml`. Edit it to change:
+**2. Edit `config.yaml`** — set your wiki's purpose and uncomment one provider block:
 
 ```yaml
 wiki:
-  purpose: "Tracking my reading on AI safety and alignment"
-  domain_description: |
-    This wiki follows papers, articles, and books on AI safety.
-    It should highlight: key researchers, competing frameworks, 
-    empirical results, and open disagreements in the field.
-  page_categories:
-    - entities      # Researchers, organisations, models
-    - concepts      # Technical concepts, frameworks, arguments
-    - sources       # Paper/article summaries
-    - synthesis     # Cross-paper analyses and comparisons
+  purpose: "Research wiki for my machine learning studies"
 
-ollama:
-  model: qwen2.5   # Change to your preferred model
+# Uncomment ONE of these:
+
+ollama:                          # Free, runs locally
+  model: qwen2.5:14b
   base_url: http://localhost:11434
+
+# gemini:                        # Free tier available
+#   model: gemini-2.0-flash
+#   api_key: YOUR_KEY_HERE
+
+# anthropic:                     # Best quality for complex wikis
+#   model: claude-sonnet-4-5
+#   api_key: YOUR_KEY_HERE
 ```
 
-After editing `config.yaml`, regenerate `AGENTS.md`:
-```bash
+**3. Run init again** to apply the config and create the wiki structure:
+```powershell
 python agent.py init
 ```
 
-You can also edit `AGENTS.md` directly to fine-tune the agent's instructions — it's just a markdown file.
+---
+
+## Choosing a provider
+
+| Provider | Cost | Quality | Setup |
+|----------|------|---------|-------|
+| Ollama | Free | Good (depends on model) | Runs locally, needs a capable GPU or CPU |
+| Gemini | Free tier available | Good | API key from aistudio.google.com |
+| Claude | Pay per use (~$0.05-0.15 per ingest) | Excellent | API key from console.anthropic.com |
+| OpenAI | Pay per use | Very good | API key from platform.openai.com |
+
+For **Ollama**, recommended models: `qwen2.5:14b` (best), `qwen2.5:7b` (faster), `llama3.1:8b`. Pull one with:
+```powershell
+ollama pull qwen2.5:14b
+ollama serve
+```
+
+For **cloud providers**, generate an API key from the links above and paste it into `config.yaml`. Never commit your API key to git — use environment variables for shared setups:
+```powershell
+$env:ANTHROPIC_API_KEY = "sk-ant-..."
+$env:GOOGLE_API_KEY = "AIza..."
+```
 
 ---
 
-## Source Formats
+## Daily usage
 
-The agent can read anything as plain text. For best results, convert sources to markdown first:
-- **Web articles**: Use [Obsidian Web Clipper](https://obsidian.md/clipper) or [markdownify](https://github.com/matthewwithanm/python-markdownify)
-- **PDFs**: Use `pdftotext` or `pypdf2`
-- **Plain text**: Works as-is
-- **YouTube transcripts**: Copy and paste into a `.txt` file
+### Ingest a source document
+Drop a file into your wiki's `raw/` folder, then:
+```powershell
+python agent.py ingest raw\my-article.pdf
+python agent.py ingest raw\notes.docx
+python agent.py ingest raw\paper.txt
+```
+Supported formats: PDF, Word (.docx), plain text, HTML, CSV, Markdown, JSON, YAML.
+
+The agent will read the document, extract key information, and create or update 5-15 wiki pages automatically.
+
+### Ask a question
+```powershell
+python agent.py query "What are the main differences between transformers and RNNs?"
+python agent.py query "Who are the key researchers in this field?"
+```
+
+### Interactive chat session
+```powershell
+python agent.py chat
+```
+
+Inside chat you can have a conversation, ask follow-up questions, request analyses, and ask the agent to ingest files, all while it remembers the context of the session. Special commands:
+
+| Command | What it does |
+|---------|-------------|
+| `/ingest raw\file.pdf` | Ingest a source file |
+| `/query what is X?` | Run a focused query |
+| `/lint` | Health-check the wiki |
+| `/reset` | Clear conversation history (wiki unchanged) |
+| `/exit` | Return to the terminal |
+
+### Health-check the wiki
+```powershell
+python agent.py lint
+```
+Checks for orphan pages, broken wikilinks, concepts mentioned without their own page, and contradictions between sources.
 
 ---
 
-## Adding a Search Tool (for large wikis)
+## Wiki structure
 
-At ~100+ pages, you may want proper search. The gist recommends [qmd](https://github.com/tobi/qmd) for local hybrid BM25/vector search. The agent's built-in `search_wiki` tool uses basic text matching, which works well at small scale.
+After a few ingests your wiki folder will look like this:
+
+```
+my-wiki/
+├── AGENTS.md               <- Agent instructions (regenerated by init)
+├── config.yaml             <- Your configuration
+├── raw/                    <- Source documents (agent never modifies these)
+│   ├── paper.pdf
+│   └── article.docx
+└── wiki/                   <- Everything the agent writes
+    ├── index.md            <- Master catalogue of all pages
+    ├── log.md              <- Append-only history of all operations
+    ├── entities/           <- People, organisations, tools, products
+    ├── concepts/           <- Ideas, methods, frameworks, theories
+    ├── sources/            <- One summary page per ingested document
+    └── synthesis/          <- Analyses, comparisons, and conclusions
+```
+
+Pages cross-reference each other using `[[wikilink]]` syntax, compatible with Obsidian. Open the `wiki/` folder as an Obsidian vault to get a visual graph of how everything connects.
 
 ---
 
-## Architecture Notes
+## Tips
 
-**Why tool calling, not code execution?**
-Tool calling is more reliable with smaller local models than asking them to generate and run arbitrary shell scripts. The tools are simple, predictable, and the agent can't do anything outside the wiki root.
-
-**Why inject index.md at session start?**
-The agent has no memory between sessions. By injecting the current wiki index into every system prompt, it always knows what pages exist without having to list them first.
-
-**Why AGENTS.md (not hardcoded prompts)?**
-AGENTS.md is user-editable and version-controlled alongside the wiki. As you figure out what conventions work for your domain, you can tune the agent's instructions directly. The schema co-evolves with the wiki.
-
-**Why local/Ollama?**
-Privacy, cost, and offline access. Your knowledge base may contain personal or sensitive information. Running locally means nothing leaves your machine.
+- **Git your wiki.** Run `git init` inside the wiki folder — you get full version history of every page for free. Commit after each session.
+- **One source at a time** gives better results than batch ingesting. Stay involved and guide the agent on what to focus on.
+- **Ask the agent to save good answers.** After a useful query response say "save that as an analysis page" — good insights should live in the wiki, not disappear into chat history.
+- **Reconfigure any time.** Edit `config.yaml` and run `python agent.py init` again to update the wiki's purpose or switch providers. Your existing pages are never touched.
+- **Switch providers freely.** The wiki is provider-agnostic markdown. Start with Gemini's free tier, switch to Claude for important ingests, run queries with Ollama — all against the same wiki.
 
 ---
 
 ## Troubleshooting
 
-**"Ollama not detected"**
-→ Make sure Ollama is running: `ollama serve`
+**"Config file not found"** — Run `python agent.py init` first to create `config.yaml`.
 
-**"Model X not found"**
-→ Pull it: `ollama pull qwen2.5`
+**"Ollama not reachable"** — Start Ollama with `ollama serve` in a separate terminal, or switch to a cloud provider in `config.yaml`.
 
-**Agent doesn't use tools / ignores instructions**
-→ Try a larger or different model. qwen2.5:14b is significantly more reliable than 7b for complex multi-tool tasks.
+**Gemini 429 errors** — The free tier has low quotas. Wait a minute and retry, or add billing to your project at aistudio.google.com to unlock higher limits. The agent will automatically try fallback models before giving up.
 
-**Agent writes incomplete pages**
-→ Small models sometimes stop early. Add to your chat: "Please continue — finish writing the full page."
+**Agent writes very little after ingest** — Try a larger or more capable model. Small models (under 7B parameters) often skip creating cross-reference pages. You can also prompt explicitly: "make sure to create entity and concept pages for everything mentioned".
 
-**Context window errors**
-→ Your source file may be too large. Split it into sections and ingest each separately.
+**Slow responses** — Normal for large local models. Check `ollama ps` to confirm the model is loaded into VRAM. Cloud providers are generally much faster.
