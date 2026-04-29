@@ -59,7 +59,8 @@ if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
     Write-Host "  Installing Chocolatey..."
     Set-ExecutionPolicy Bypass -Scope Process -Force
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-    Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+    $chocoInstall = (New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')
+    & ([scriptblock]::Create($chocoInstall))
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
     if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
         Write-Fail "Chocolatey installation failed. Please install manually from https://chocolatey.org"
