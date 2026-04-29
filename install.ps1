@@ -1,4 +1,4 @@
-# LLM Wiki Agent — Windows Setup Script
+# LLM Wiki Agent - Windows Setup Script
 # =======================================
 # Installs all dependencies for the LLM Wiki Agent using Chocolatey.
 #
@@ -22,25 +22,26 @@ $ErrorActionPreference = "Stop"
 
 function Write-Step {
     param([string]$msg)
-    Write-Host "`n==> $msg" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "==> $msg" -ForegroundColor Cyan
 }
 
 function Write-Success {
     param([string]$msg)
-    Write-Host "  ✅ $msg" -ForegroundColor Green
+    Write-Host "  [OK] $msg" -ForegroundColor Green
 }
 
 function Write-Warn {
     param([string]$msg)
-    Write-Host "  ⚠️  $msg" -ForegroundColor Yellow
+    Write-Host "  [WARN] $msg" -ForegroundColor Yellow
 }
 
 function Write-Fail {
     param([string]$msg)
-    Write-Host "  ❌ $msg" -ForegroundColor Red
+    Write-Host "  [FAIL] $msg" -ForegroundColor Red
 }
 
-# ─── Check running as Administrator ──────────────────────────────────────────
+# --- Check running as Administrator ---
 
 Write-Step "Checking administrator privileges"
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -51,7 +52,7 @@ if (-not $isAdmin) {
 }
 Write-Success "Running as Administrator"
 
-# ─── Install Chocolatey if not present ───────────────────────────────────────
+# --- Install Chocolatey if not present ---
 
 Write-Step "Checking for Chocolatey"
 if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
@@ -59,10 +60,7 @@ if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
     Set-ExecutionPolicy Bypass -Scope Process -Force
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
     Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-    
-    # Refresh PATH so choco is available immediately
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-    
     if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
         Write-Fail "Chocolatey installation failed. Please install manually from https://chocolatey.org"
         exit 1
@@ -72,7 +70,7 @@ if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
     Write-Success "Chocolatey already installed ($(choco --version))"
 }
 
-# ─── Install Python ───────────────────────────────────────────────────────────
+# --- Install Python ---
 
 Write-Step "Checking for Python $PythonVersion+"
 $pythonOk = $false
@@ -91,10 +89,7 @@ if (Get-Command python -ErrorAction SilentlyContinue) {
 if (-not $pythonOk) {
     Write-Host "  Installing Python $PythonVersion via Chocolatey..."
     choco install python --version=$PythonVersion -y --no-progress
-    
-    # Refresh PATH
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-    
     if (Get-Command python -ErrorAction SilentlyContinue) {
         Write-Success "Python installed: $(python --version)"
     } else {
@@ -103,7 +98,7 @@ if (-not $pythonOk) {
     }
 }
 
-# ─── Install Git (optional but useful for versioning the wiki) ────────────────
+# --- Install Git ---
 
 if (-not $SkipGit) {
     Write-Step "Checking for Git"
@@ -117,7 +112,7 @@ if (-not $SkipGit) {
     }
 }
 
-# ─── Install Ollama (optional) ────────────────────────────────────────────────
+# --- Install Ollama ---
 
 if (-not $SkipOllama) {
     Write-Step "Checking for Ollama"
@@ -137,13 +132,13 @@ if (-not $SkipOllama) {
     Write-Warn "Skipping Ollama (using cloud provider only)"
 }
 
-# ─── Install Python packages ──────────────────────────────────────────────────
+# --- Install Python packages ---
 
 Write-Step "Installing Python packages from requirements.txt"
 
 $reqFile = Join-Path $PSScriptRoot "requirements.txt"
 if (-not (Test-Path $reqFile)) {
-    Write-Warn "requirements.txt not found at $reqFile — installing packages directly"
+    Write-Warn "requirements.txt not found - installing packages directly"
     $packages = @("requests>=2.31.0", "pyyaml>=6.0", "pypdf>=3.0.0", "python-docx>=1.0.0")
     foreach ($pkg in $packages) {
         Write-Host "  Installing $pkg..."
@@ -160,14 +155,14 @@ if (-not (Test-Path $reqFile)) {
 
 Write-Success "Python packages installed"
 
-# ─── Verify Python imports ────────────────────────────────────────────────────
+# --- Verify Python imports ---
 
 Write-Step "Verifying Python package imports"
 $checks = @(
-    @{ import = "requests";  name = "requests" },
-    @{ import = "yaml";      name = "pyyaml" },
-    @{ import = "pypdf";     name = "pypdf" },
-    @{ import = "docx";      name = "python-docx" }
+    @{ import = "requests"; name = "requests" },
+    @{ import = "yaml";     name = "pyyaml" },
+    @{ import = "pypdf";    name = "pypdf" },
+    @{ import = "docx";     name = "python-docx" }
 )
 
 $allOk = $true
@@ -182,13 +177,13 @@ foreach ($check in $checks) {
 }
 
 if (-not $allOk) {
-    Write-Warn "Some packages failed to import. Try running: python -m pip install -r requirements.txt"
+    Write-Warn "Some packages failed to import. Try: python -m pip install -r requirements.txt"
 }
 
-# ─── Verify agent files ───────────────────────────────────────────────────────
+# --- Verify agent files ---
 
 Write-Step "Checking agent files"
-$requiredFiles = @("agent.py", "providers.py", "tools.py", "schema.py", "requirements.txt")
+$requiredFiles = @("agent.py", "providers.py", "tools.py", "schema.py")
 $missingFiles = @()
 
 foreach ($file in $requiredFiles) {
@@ -196,7 +191,7 @@ foreach ($file in $requiredFiles) {
     if (Test-Path $filePath) {
         Write-Success "$file"
     } else {
-        Write-Fail "$file — NOT FOUND"
+        Write-Fail "$file - NOT FOUND"
         $missingFiles += $file
     }
 }
@@ -206,12 +201,11 @@ if ($missingFiles.Count -gt 0) {
     Write-Host "  Make sure all agent files are in the same directory as install.ps1"
 }
 
-# ─── Optional: pull a default Ollama model ────────────────────────────────────
+# --- Check Ollama models ---
 
 if (-not $SkipOllama) {
     Write-Step "Ollama model setup"
     Write-Host "  Checking if Ollama server is running..."
-    
     try {
         $response = Invoke-WebRequest -Uri "http://localhost:11434/api/tags" -TimeoutSec 3 -ErrorAction Stop
         $models = ($response.Content | ConvertFrom-Json).models
@@ -220,7 +214,7 @@ if (-not $SkipOllama) {
         } else {
             Write-Warn "Ollama is running but no models are installed."
             Write-Host "  To install the recommended model, run:"
-            Write-Host "    ollama pull qwen2.5:14b" -ForegroundColor White
+            Write-Host "    ollama pull qwen2.5:14b"
         }
     } catch {
         Write-Warn "Ollama server not currently running."
@@ -229,33 +223,34 @@ if (-not $SkipOllama) {
     }
 }
 
-# ─── Summary ──────────────────────────────────────────────────────────────────
+# --- Done ---
 
-Write-Host "`n" + ("=" * 60) -ForegroundColor Cyan
-Write-Host "  LLM Wiki Agent — Installation Complete" -ForegroundColor Cyan
-Write-Host ("=" * 60) -ForegroundColor Cyan
-
-Write-Host @"
-
-Next steps:
-
-  1. Initialise a new wiki:
-       python agent.py init
-
-  2. Edit config.yaml to set your provider:
-       - Ollama (local):  uncomment the ollama: block
-       - Gemini:          uncomment the gemini: block, add your API key
-       - Claude:          uncomment the anthropic: block, add your API key
-       - OpenAI:          uncomment the openai: block, add your API key
-
-  3. Run init again to apply the config:
-       python agent.py init
-
-  4. Drop source files into raw/ and ingest them:
-       python agent.py ingest raw\myfile.pdf
-
-  5. Start chatting:
-       python agent.py chat
-
-  Documentation: See README.md for full usage guide.
-"@
+Write-Host ""
+Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host "  LLM Wiki Agent - Installation Complete" -ForegroundColor Cyan
+Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Next steps:"
+Write-Host ""
+Write-Host "  1. Create a wiki folder and run init:"
+Write-Host "       mkdir C:\my-wiki"
+Write-Host "       cd C:\my-wiki"
+Write-Host "       python C:\path\to\agent.py init"
+Write-Host ""
+Write-Host "  2. Edit config.yaml to set your provider:"
+Write-Host "       - Ollama (local):  uncomment the ollama: block"
+Write-Host "       - Gemini:          uncomment gemini: block, add your API key"
+Write-Host "       - Claude:          uncomment anthropic: block, add your API key"
+Write-Host "       - OpenAI:          uncomment openai: block, add your API key"
+Write-Host ""
+Write-Host "  3. Run init again to apply the config:"
+Write-Host "       python agent.py init"
+Write-Host ""
+Write-Host "  4. Drop source files into raw/ and ingest them:"
+Write-Host "       python agent.py ingest raw\myfile.pdf"
+Write-Host ""
+Write-Host "  5. Start chatting:"
+Write-Host "       python agent.py chat"
+Write-Host ""
+Write-Host "  See README.md for full usage guide."
+Write-Host ""
