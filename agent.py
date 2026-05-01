@@ -419,53 +419,47 @@ def cmd_init(args):
 
     if not config_path.exists():
         print("No config.yaml found — creating a sample configuration...")
-        sample_config = textwrap.dedent("""\
-            # LLM Wiki Agent Configuration
-            # Edit this file, then run 'python agent.py init' again to apply.
-
-            wiki:
-            purpose: "A personal knowledge base for learning and research"
-            domain_description: |
-                This wiki tracks articles, books, papers, and notes I read.
-                It organises knowledge by entities (people, organisations, tools)
-                and concepts (ideas, methods, frameworks). The wiki should:
-                - Highlight connections and contradictions between sources
-                - Build up a running synthesis as new material is added
-                - Flag open questions and gaps for further research
-            page_categories:
-                - entities
-                - concepts
-                - sources
-                - synthesis
-                - questions
-
-            # ── LLM Provider ──────────────────────────────────────────────────────────
-            # Uncomment ONE provider block and fill in the details.
-            # For API keys, you can paste them here or set an environment variable.
-
-            # Local Ollama (default — requires https://ollama.com running)
-            ollama:
-            model: gemma4:26b
-            base_url: http://localhost:11434
-
-            # Anthropic Claude (set ANTHROPIC_API_KEY env var, or paste key below)
-            # anthropic:
-            #   model: claude-sonnet-4-5
-            #   api_key:   # leave blank to use ANTHROPIC_API_KEY env var
-
-            # OpenAI (set OPENAI_API_KEY env var, or paste key below)
-            # openai:
-            #   model: gpt-4o
-            #   api_key:   # leave blank to use OPENAI_API_KEY env var
-
-            # Google Gemini (set GOOGLE_API_KEY env var, or paste key below)
-            # gemini:
-            #   model: gemini-2.0-flash
-            #   api_key:   # leave blank to use GOOGLE_API_KEY env var
-
-            paths:
-            wiki_root: .
-        """)
+        sample_config = (
+            "# LLM Wiki Agent Configuration\n"
+            "# Edit this file, then run 'python agent.py init' again to apply.\n"
+            "\n"
+            "wiki:\n"
+            "  purpose: \"A personal knowledge base for learning and research\"\n"
+            "  domain_description: |\n"
+            "    This wiki tracks articles, books, papers, and notes I read.\n"
+            "    It organises knowledge by entities (people, organisations, tools)\n"
+            "    and concepts (ideas, methods, frameworks). The wiki should:\n"
+            "    - Highlight connections and contradictions between sources\n"
+            "    - Build up a running synthesis as new material is added\n"
+            "    - Flag open questions and gaps for further research\n"
+            "  page_categories:\n"
+            "    - entities\n"
+            "    - concepts\n"
+            "    - sources\n"
+            "    - synthesis\n"
+            "    - questions\n"
+            "\n"
+            "# Uncomment ONE provider block and fill in the details.\n"
+            "\n"
+            "ollama:\n"
+            "  model: gemma4:26b\n"
+            "  base_url: http://localhost:11434\n"
+            "\n"
+            "# anthropic:\n"
+            "#   model: claude-sonnet-4-5\n"
+            "#   api_key:\n"
+            "\n"
+            "# openai:\n"
+            "#   model: gpt-4o\n"
+            "#   api_key:\n"
+            "\n"
+            "# gemini:\n"
+            "#   model: gemini-2.0-flash\n"
+            "#   api_key:\n"
+            "\n"
+            "paths:\n"
+            "  wiki_root: .\n"
+        )
         config_path.write_text(sample_config, encoding="utf-8")
         print(f"✅ Created {CONFIG_FILE}. Edit it to set your wiki's purpose, then run init again.")
         return

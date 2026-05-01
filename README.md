@@ -24,6 +24,7 @@ The wiki is plain markdown files on your filesystem. You own them. No database, 
 | `schema.py` | Generates the AGENTS.md schema file that configures the agent's behaviour |
 | `requirements.txt` | Python package dependencies |
 | `install.ps1` | Windows setup script (installs all dependencies) |
+| `install.sh` | Linux setup script (installs all dependencies) |
 
 ---
 
@@ -50,16 +51,62 @@ This will install Python, Git, Ollama, and all required Python packages automati
 
 ---
 
+## Installation (Linux — Ubuntu/Debian)
+
+**1. Navigate to this folder:**
+```bash
+cd /path/to/llm-wiki-agent
+```
+
+**2. Make the install script executable and run it:**
+```bash
+chmod +x install.sh
+./install.sh
+```
+
+This will install Git, Ollama, and all required Python packages inside a virtual environment. The virtual environment is created in a `venv/` folder inside the agent directory.
+
+To skip Ollama if you plan to use a cloud provider only:
+```bash
+./install.sh --skip-ollama
+```
+
+**3. Activate the virtual environment before using the agent:**
+```bash
+source venv/bin/activate
+```
+
+You need to do this once each time you open a new terminal. To avoid having to remember, add it to your shell profile:
+```bash
+echo "source /path/to/llm-wiki-agent/venv/bin/activate" >> ~/.bashrc
+```
+
+**Note on Ollama:** On Linux, Ollama installs as a systemd service and starts automatically. You do not need to run `ollama serve` manually. Check its status with:
+```bash
+sudo systemctl status ollama
+```
+
+---
+
 ## Setup
 
 **1. Create a new wiki folder and run init:**
+
+Windows:
 ```powershell
 mkdir C:\my-wiki
 cd C:\my-wiki
-python C:\path\to\agent.py init
+python agent.py init
 ```
 
-This creates a `config.yaml` with all options commented in. Open it in any text editor.
+Linux:
+```bash
+mkdir ~/my-wiki
+cd ~/my-wiki
+python3 /path/to/agent.py init
+```
+
+This creates a `config.yaml` with all provider options available. Open it in any text editor.
 
 **2. Edit `config.yaml`** — set your wiki's purpose and uncomment one provider block:
 
@@ -83,8 +130,10 @@ ollama:                          # Free, runs locally
 ```
 
 **3. Run init again** to apply the config and create the wiki structure:
-```powershell
-python agent.py init
+
+```bash
+python agent.py init      # Windows
+python3 agent.py init     # Linux
 ```
 
 ---
@@ -99,15 +148,28 @@ python agent.py init
 | OpenAI | Pay per use | Very good | API key from platform.openai.com |
 
 For **Ollama**, recommended models: `qwen2.5:14b` (best), `qwen2.5:7b` (faster), `llama3.1:8b`. Pull one with:
-```powershell
+```bash
 ollama pull qwen2.5:14b
-ollama serve
 ```
 
+On Windows you also need to start the server:
+```powershell
+ollama serve
+```
+On Linux this happens automatically via the systemd service.
+
 For **cloud providers**, generate an API key from the links above and paste it into `config.yaml`. Never commit your API key to git — use environment variables for shared setups:
+
+Windows:
 ```powershell
 $env:ANTHROPIC_API_KEY = "sk-ant-..."
 $env:GOOGLE_API_KEY = "AIza..."
+```
+
+Linux:
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+export GOOGLE_API_KEY="AIza..."
 ```
 
 ---
@@ -116,38 +178,39 @@ $env:GOOGLE_API_KEY = "AIza..."
 
 ### Ingest a source document
 Drop a file into your wiki's `raw/` folder, then:
-```powershell
-python agent.py ingest raw\my-article.pdf
-python agent.py ingest raw\notes.docx
-python agent.py ingest raw\paper.txt
+
+```bash
+python agent.py ingest raw\my-article.pdf    # Windows
+python3 agent.py ingest raw/my-article.pdf   # Linux
 ```
+
 Supported formats: PDF, Word (.docx), plain text, HTML, CSV, Markdown, JSON, YAML.
 
 The agent will read the document, extract key information, and create or update 5-15 wiki pages automatically.
 
 ### Ask a question
-```powershell
+```bash
 python agent.py query "What are the main differences between transformers and RNNs?"
-python agent.py query "Who are the key researchers in this field?"
 ```
 
 ### Interactive chat session
-```powershell
-python agent.py chat
+```bash
+python agent.py chat      # Windows
+python3 agent.py chat     # Linux
 ```
 
 Inside chat you can have a conversation, ask follow-up questions, request analyses, and ask the agent to ingest files, all while it remembers the context of the session. Special commands:
 
 | Command | What it does |
 |---------|-------------|
-| `/ingest raw\file.pdf` | Ingest a source file |
+| `/ingest raw/file.pdf` | Ingest a source file |
 | `/query what is X?` | Run a focused query |
 | `/lint` | Health-check the wiki |
 | `/reset` | Clear conversation history (wiki unchanged) |
 | `/exit` | Return to the terminal |
 
 ### Health-check the wiki
-```powershell
+```bash
 python agent.py lint
 ```
 Checks for orphan pages, broken wikilinks, concepts mentioned without their own page, and contradictions between sources.
@@ -192,7 +255,11 @@ Pages cross-reference each other using `[[wikilink]]` syntax, compatible with Ob
 
 **"Config file not found"** — Run `python agent.py init` first to create `config.yaml`.
 
-**"Ollama not reachable"** — Start Ollama with `ollama serve` in a separate terminal, or switch to a cloud provider in `config.yaml`.
+**"Ollama not reachable" (Windows)** — Start Ollama with `ollama serve` in a separate terminal, or switch to a cloud provider in `config.yaml`.
+
+**"Ollama not reachable" (Linux)** — Check the service status with `sudo systemctl status ollama`. Start it with `sudo systemctl start ollama` if it is not running.
+
+**"ModuleNotFoundError" (Linux)** — You need to activate the virtual environment first: `source /path/to/llm-wiki-agent/venv/bin/activate`
 
 **Gemini 429 errors** — The free tier has low quotas. Wait a minute and retry, or add billing to your project at aistudio.google.com to unlock higher limits. The agent will automatically try fallback models before giving up.
 
